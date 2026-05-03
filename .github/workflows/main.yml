@@ -1,0 +1,29 @@
+name: Build WatchFix Rootless
+
+on:
+  workflow_dispatch: # 允许你随时手动点击按钮开始编译
+
+jobs:
+  build:
+    runs-on: macos-latest # 白嫖一台最新的虚拟 Mac 电脑
+    
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@v4
+
+      - name: 配置 Theos 编译环境
+        run: |
+          brew install ldid dpkg xz
+          git clone --recursive https://github.com/theos/theos.git ~/theos
+
+      - name: 开始编译无根版 (Rootless) 插件
+        run: |
+          export THEOS=~/theos
+          # 这一步强制告诉系统打包成 rootless 格式
+          make package THEOS_PACKAGE_SCHEME=rootless
+
+      - name: 提取生成的 deb 文件
+        uses: actions/upload-artifact@v4
+        with:
+          name: WatchFix-Rootless-DEB
+          path: packages/*.deb
