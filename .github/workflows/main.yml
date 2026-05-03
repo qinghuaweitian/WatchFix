@@ -11,22 +11,28 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: 配置 Roothide 专属 Theos 环境与【缝合版】iOS SDK
+      - name: 配置 Roothide 专属 Theos 环境与【精确提取版】iOS SDK
         run: |
           brew install ldid dpkg xz
-          # 【关键修改】：使用 Roothide 官方团队专用的 Theos 分支，里面自带 roothide.h
           git clone --recursive https://github.com/roothide/theos.git ~/theos
           
-          # 克隆包含所有苹果私有框架的完整 SDK 库
-          git clone --depth 1 https://github.com/xybp888/iOS-SDKs.git ~/ios-sdks
+          # 【终极解决】：使用稀疏检出，只拿我们需要的 16.4 和 14.5，避开 16.5 的坑，速度提升百倍！
+          mkdir ~/ios-sdks && cd ~/ios-sdks
+          git init
+          git remote add origin https://github.com/xybp888/iOS-SDKs.git
+          git sparse-checkout set iPhoneOS16.4.sdk iPhoneOS14.5.sdk
+          git pull --depth 1 origin master || git pull --depth 1 origin main
           
-          # 将 16.4 作为主力 SDK 移入工作区
-          mv ~/ios-sdks/iPhoneOS16.4.sdk ~/theos/sdks/
+          # 将 16.4 移入工作区
+          mv iPhoneOS16.4.sdk ~/theos/sdks/
           
-          # 【史诗级缝合】：把 14.5 SDK 里所有的老旧私有框架，无冲突地 (-n) 复制到 16.4 里面去
-          cp -Rn ~/ios-sdks/iPhoneOS14.5.sdk/System/Library/PrivateFrameworks/* ~/theos/sdks/iPhoneOS16.4.sdk/System/Library/PrivateFrameworks/
+          # 确保 16.4 里有容纳私有框架的文件夹
+          mkdir -p ~/theos/sdks/iPhoneOS16.4.sdk/System/Library/PrivateFrameworks/
           
-          # 注入 roothide.h 防断链
+          # 史诗级缝合：把 14.5 里的老旧私有框架复制进去
+          cp -Rn iPhoneOS14.5.sdk/System/Library/PrivateFrameworks/* ~/theos/sdks/iPhoneOS16.4.sdk/System/Library/PrivateFrameworks/
+          
+          # 注入 roothide.h
           cp ~/theos/vendor/include/roothide.h ~/theos/sdks/iPhoneOS16.4.sdk/usr/include/ || true
           
       - name: 开始编译 Roothide 原生版插件
