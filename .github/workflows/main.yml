@@ -17,17 +17,17 @@ jobs:
           # 【关键修改】：使用 Roothide 官方团队专用的 Theos 分支，里面自带 roothide.h
           git clone --recursive https://github.com/roothide/theos.git ~/theos
           
-          # 【终极修复】：直接克隆包含所有苹果私有框架的完整 SDK 库（GitHub 服务器网速极快，几秒就能下完）
+          # 克隆包含所有苹果私有框架的完整 SDK 库
           git clone --depth 1 https://github.com/xybp888/iOS-SDKs.git ~/ios-sdks
           
-          # 把 14.5 的完整版 SDK 移动到 Theos 的工作目录中
-          mv ~/ios-sdks/iPhoneOS14.5.sdk ~/theos/sdks/
+          # 【关键修改 1】：不要只拿 14.5 了，把里面所有的 SDK（包括 16.x 等新版）全移进 Theos 里
+          mv ~/ios-sdks/*.sdk ~/theos/sdks/
 
       - name: 开始编译 Roothide 原生版插件
         run: |
           export THEOS=~/theos
-          # 【关键修改】：明确指定使用刚才下载的 14.5 SDK 进行编译，最低兼容 iOS 15
-          make package THEOS_PACKAGE_SCHEME=roothide ARCHS="arm64 arm64e" TARGET="iphone:14.5:15.0"
+          # 【关键修改 2】：把 14.5 换成 latest，让系统自动使用支持 Swift 并发特性的最新版 SDK 来打包
+          make package THEOS_PACKAGE_SCHEME=roothide ARCHS="arm64 arm64e" TARGET="iphone:latest:15.0"
 
       - name: 提取生成的 deb 文件
         uses: actions/upload-artifact@v4
