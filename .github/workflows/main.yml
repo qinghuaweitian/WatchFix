@@ -11,7 +11,7 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: 配置 Roothide 专属 Theos 环境与完整版 iOS SDK
+      - name: 配置 Roothide 专属 Theos 环境与【缝合版】iOS SDK
         run: |
           brew install ldid dpkg xz
           # 【关键修改】：使用 Roothide 官方团队专用的 Theos 分支，里面自带 roothide.h
@@ -20,11 +20,13 @@ jobs:
           # 克隆包含所有苹果私有框架的完整 SDK 库
           git clone --depth 1 https://github.com/xybp888/iOS-SDKs.git ~/ios-sdks
           
-          # 【关键修改 1】：不要只拿 14.5 了，把里面所有的 SDK（包括 16.x 等新版）全移进 Theos 里
-          mv ~/ios-sdks/*.sdk ~/theos/sdks/
+          # 将 16.4 作为主力 SDK 移入工作区
+          mv ~/ios-sdks/iPhoneOS16.4.sdk ~/theos/sdks/
           
-          # [CRITICAL FIX 2]: Inject roothide.h directly into the SDK's core include folder
-          # This guarantees the Swift PCH generator will find it!
+          # 【史诗级缝合】：把 14.5 SDK 里所有的老旧私有框架，无冲突地 (-n) 复制到 16.4 里面去
+          cp -Rn ~/ios-sdks/iPhoneOS14.5.sdk/System/Library/PrivateFrameworks/* ~/theos/sdks/iPhoneOS16.4.sdk/System/Library/PrivateFrameworks/
+          
+          # 注入 roothide.h 防断链
           cp ~/theos/vendor/include/roothide.h ~/theos/sdks/iPhoneOS16.4.sdk/usr/include/ || true
           
       - name: 开始编译 Roothide 原生版插件
