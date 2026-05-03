@@ -1,49 +1,71 @@
-name: Build WatchFix Native Roothide
+name: Build CI
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # 保留了这个，意味着你可以随时手动点击运行
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: macos-latest
-    
     steps:
-      - name: 检出源码
-        uses: actions/checkout@v4
+      - uses: actions/checkout@main
 
-      - name: 配置 Roothide 专属 Theos 环境与【纯净缝合版】iOS SDK
-        run: |
-          brew install ldid dpkg xz
-          git clone --recursive https://github.com/roothide/theos.git ~/theos
-          
-          # 1. 获取官方小巧、无冲突的纯净 16.5 SDK
-          git clone --depth 1 https://github.com/theos/sdks.git ~/theos-sdks
-          mv ~/theos-sdks/iPhoneOS16.5.sdk ~/theos/sdks/
-          
-          # 2. 精准只拉取 14.5 的私有框架（彻底避开新版 SDK 的大小写冲突坑）
-          mkdir ~/ios-sdks && cd ~/ios-sdks
-          git init
-          git remote add origin https://github.com/xybp888/iOS-SDKs.git
-          git config core.sparseCheckout true
-          echo "iPhoneOS14.5.sdk/" >> .git/info/sparse-checkout
-          # 强制拉取，无视任何小警告
-          git pull --depth 1 origin master || true
-          
-          # 3. 完美缝合：把 14.5 的老旧私有框架全部倒进纯净的 16.5 里
-          mkdir -p ~/theos/sdks/iPhoneOS16.5.sdk/System/Library/PrivateFrameworks/
-          cp -Rn ~/ios-sdks/iPhoneOS14.5.sdk/System/Library/PrivateFrameworks/* ~/theos/sdks/iPhoneOS16.5.sdk/System/Library/PrivateFrameworks/
-          
-          # 注入 roothide.h
-          cp ~/theos/vendor/include/roothide.h ~/theos/sdks/iPhoneOS16.5.sdk/usr/include/ || true
-
-      - name: 开始编译 Roothide 原生版插件
-        run: |
-          export THEOS=~/theos
-          # 使用缝合好的无冲突 16.5 环境编译
-          make package THEOS_PACKAGE_SCHEME=roothide ARCHS="arm64 arm64e" TARGET="iphone:16.5:15.0"
-
-      - name: 提取生成的 deb 文件
-        uses: actions/upload-artifact@v4
+      - name: Checkout roothide/theos
+        id: checkout_theos
+        uses: actions/checkout@main
         with:
-          name: WatchFix-Roothide-Native-DEB
-          path: packages/*.deb
+          repository: roothide/theos
+          ref: master
+          submodules: recursive
+          path: theos
+
+      - name: Checkout theos/sdks
+        id: checkout_sdks
+        if: steps.checkout_theos.outcome == 'success'
+        uses: actions/checkout@main
+        with:
+          repository: theos/sdks
+          sparse-checkout: iPhoneOS16.5.sdk
+          path: theos/sdks
+        
+      - name: Install Dependencies
+        id: install_deps
+        if: steps.checkout_sdks.outcome == 'success'
+        run: |
+          brew install make ldid
+
+      - name: Build Rootless Package
+        id: build_rootless
+        if: steps.install_deps.outcome == 'success'
+        env:
+          THEOS: theos
+        run: |
+          gmake clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
+
+      - name: Upload a Rootless Build Artifact
+        if: steps.build_rootless.outcome == 'success'
+        uses: actions/upload-artifact@v4  # 【关键修正】：v7 改为官方最新的 v4
+        with:
+          name: rootless-package
+          path: packages/rootless/*.deb
+          retention-days: 15
+          archive: false
+  
+      - name: Build Roothide Package
+        id: build_roothide
+        if: steps.install_deps.outcome == 'success'
+        env:
+          THEOS: theos
+        run: |
+          gmake clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=roothide
+        
+      - name: Upload a Roothide Build Artifact
+        if: steps.build_roothide.outcome == 'success'
+        uses: actions/upload-artifact@v4  # 【关键修正】：v7 改为官方最新的 v4
+        with:
+          name: roothide-package
+          path: packages/roothide/*.deb
+          retention-days: 15
+          archive: false
