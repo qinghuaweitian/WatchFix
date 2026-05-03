@@ -1,45 +1,46 @@
 name: Build WatchFix Native Roothide
 
 on:
-  workflow_dispatch: # 允许你随时手动点击按钮开始编译
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-latest  # 白嫖一台最新的虚拟 Mac 电脑
+    runs-on: macos-latest
     
     steps:
-      - name: Checkout Source Code
+      - name: 检出源码
         uses: actions/checkout@v4
 
-      - name: 配置 Roothide 专属 Theos 环境与【精确提取版】iOS SDK
+      - name: 配置 Roothide 专属 Theos 环境与【纯净缝合版】iOS SDK
         run: |
           brew install ldid dpkg xz
           git clone --recursive https://github.com/roothide/theos.git ~/theos
           
-          # 【终极解决】：使用稀疏检出，只拿我们需要的 16.4 和 14.5，避开 16.5 的坑，速度提升百倍！
+          # 1. 获取官方小巧、无冲突的纯净 16.5 SDK
+          git clone --depth 1 https://github.com/theos/sdks.git ~/theos-sdks
+          mv ~/theos-sdks/iPhoneOS16.5.sdk ~/theos/sdks/
+          
+          # 2. 精准只拉取 14.5 的私有框架（彻底避开新版 SDK 的大小写冲突坑）
           mkdir ~/ios-sdks && cd ~/ios-sdks
           git init
           git remote add origin https://github.com/xybp888/iOS-SDKs.git
-          git sparse-checkout set iPhoneOS16.4.sdk iPhoneOS14.5.sdk
-          git pull --depth 1 origin master || git pull --depth 1 origin main
+          git config core.sparseCheckout true
+          echo "iPhoneOS14.5.sdk/" >> .git/info/sparse-checkout
+          # 强制拉取，无视任何小警告
+          git pull --depth 1 origin master || true
           
-          # 将 16.4 移入工作区
-          mv iPhoneOS16.4.sdk ~/theos/sdks/
-          
-          # 确保 16.4 里有容纳私有框架的文件夹
-          mkdir -p ~/theos/sdks/iPhoneOS16.4.sdk/System/Library/PrivateFrameworks/
-          
-          # 史诗级缝合：把 14.5 里的老旧私有框架复制进去
-          cp -Rn iPhoneOS14.5.sdk/System/Library/PrivateFrameworks/* ~/theos/sdks/iPhoneOS16.4.sdk/System/Library/PrivateFrameworks/
+          # 3. 完美缝合：把 14.5 的老旧私有框架全部倒进纯净的 16.5 里
+          mkdir -p ~/theos/sdks/iPhoneOS16.5.sdk/System/Library/PrivateFrameworks/
+          cp -Rn ~/ios-sdks/iPhoneOS14.5.sdk/System/Library/PrivateFrameworks/* ~/theos/sdks/iPhoneOS16.5.sdk/System/Library/PrivateFrameworks/
           
           # 注入 roothide.h
-          cp ~/theos/vendor/include/roothide.h ~/theos/sdks/iPhoneOS16.4.sdk/usr/include/ || true
-          
+          cp ~/theos/vendor/include/roothide.h ~/theos/sdks/iPhoneOS16.5.sdk/usr/include/ || true
+
       - name: 开始编译 Roothide 原生版插件
         run: |
           export THEOS=~/theos
-          # Target exactly 16.4 to satisfy both Swift Concurrency and NanoRegistry
-          make package THEOS_PACKAGE_SCHEME=roothide ARCHS="arm64 arm64e" TARGET="iphone:16.4:15.0"
+          # 使用缝合好的无冲突 16.5 环境编译
+          make package THEOS_PACKAGE_SCHEME=roothide ARCHS="arm64 arm64e" TARGET="iphone:16.5:15.0"
 
       - name: 提取生成的 deb 文件
         uses: actions/upload-artifact@v4
