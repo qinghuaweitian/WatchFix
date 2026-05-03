@@ -8,7 +8,7 @@ jobs:
     runs-on: macos-latest  # 白嫖一台最新的虚拟 Mac 电脑
     
     steps:
-      - name: 检出源码
+      - name: Checkout Source Code
         uses: actions/checkout@v4
 
       - name: 配置 Roothide 专属 Theos 环境与完整版 iOS SDK
@@ -22,12 +22,16 @@ jobs:
           
           # 【关键修改 1】：不要只拿 14.5 了，把里面所有的 SDK（包括 16.x 等新版）全移进 Theos 里
           mv ~/ios-sdks/*.sdk ~/theos/sdks/
-
+          
+          # [CRITICAL FIX 2]: Inject roothide.h directly into the SDK's core include folder
+          # This guarantees the Swift PCH generator will find it!
+          cp ~/theos/vendor/include/roothide.h ~/theos/sdks/iPhoneOS16.4.sdk/usr/include/ || true
+          
       - name: 开始编译 Roothide 原生版插件
         run: |
           export THEOS=~/theos
-          # 【关键修改 2】：把 14.5 换成 latest，让系统自动使用支持 Swift 并发特性的最新版 SDK 来打包
-          make package THEOS_PACKAGE_SCHEME=roothide ARCHS="arm64 arm64e" TARGET="iphone:latest:15.0"
+          # Target exactly 16.4 to satisfy both Swift Concurrency and NanoRegistry
+          make package THEOS_PACKAGE_SCHEME=roothide ARCHS="arm64 arm64e" TARGET="iphone:16.4:15.0"
 
       - name: 提取生成的 deb 文件
         uses: actions/upload-artifact@v4
