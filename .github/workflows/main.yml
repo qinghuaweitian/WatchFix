@@ -1,4 +1,4 @@
-name: Build CI
+name: Build WatchFix Native Roothide
 
 on:
   workflow_dispatch: # 保留了这个，意味着你可以随时手动点击运行
