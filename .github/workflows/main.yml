@@ -11,24 +11,23 @@ jobs:
       - name: 检出源码
         uses: actions/checkout@v4
 
-      - name: 配置 Roothide 专属 Theos 环境与 iOS SDK
+      - name: 配置 Roothide 专属 Theos 环境与完整版 iOS SDK
         run: |
           brew install ldid dpkg xz
           
           # 【关键修改】：使用 Roothide 官方团队专用的 Theos 分支，里面自带 roothide.h
           git clone --recursive https://github.com/roothide/theos.git ~/theos
           
-          # 下载越狱专用的 iOS SDK
-          curl -LO https://github.com/theos/sdks/archive/master.zip
-          unzip master.zip
-          mv sdks-master/*.sdk ~/theos/sdks/
-          rm -r master.zip sdks-master
+          # 【关键修改】：下载包含完整苹果私有框架 (PrivateFrameworks) 的特定版本 SDK
+          curl -LO https://github.com/theos/sdks/releases/download/2024.02.10/iPhoneOS14.5.sdk.tar.xz
+          tar -xf iPhoneOS14.5.sdk.tar.xz -C ~/theos/sdks/
+          rm iPhoneOS14.5.sdk.tar.xz
 
       - name: 开始编译 Roothide 原生版插件
         run: |
           export THEOS=~/theos
-          # 【关键修改】：直接打包生成 roothide 格式，不需要再转码了
-          make package THEOS_PACKAGE_SCHEME=roothide ARCHS="arm64 arm64e" TARGET="iphone:latest:15.0"
+          # 【关键修改】：明确指定使用刚才下载的 14.5 SDK 进行编译，最低兼容 iOS 15
+          make package THEOS_PACKAGE_SCHEME=roothide ARCHS="arm64 arm64e" TARGET="iphone:14.5:15.0"
 
       - name: 提取生成的 deb 文件
         uses: actions/upload-artifact@v4
